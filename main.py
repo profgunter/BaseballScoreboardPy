@@ -29,12 +29,15 @@ away_errors = 0
 away_inning_runs =[0]
 failed = False
 final = False
-
+pitch_count = [0,0]
+current_pitch_count = 0
 
 bases = [False, False, False]
+show_pitch_count = False
 
 home_team_color = mcolors.CSS4_COLORS["lightblue"] 
-home_team_color2 = mcolors.XKCD_COLORS["xkcd:pink"] 
+home_team_color2 = mcolors.CSS4_COLORS["black"]
+# home_team_color2 = mcolors.XKCD_COLORS["xkcd:pink"] 
 away_team_color= mcolors.XKCD_COLORS["xkcd:crimson"]
 away_team_color2= mcolors.CSS4_COLORS["ivory"]
 
@@ -46,15 +49,32 @@ name_tooltip_window = None
 def increment_inning():
     global inning
     global current_half
+    global outs
+    global pitch_count
+    global current_pitch_count
     
     if current_half < len(inning_halfs)-1:
         current_half += 1
+        if outs == 3:
+            outs = 0
         if current_half == 3:
+            print("End of Inning")
+            pitch_count[0] = current_pitch_count
+            current_pitch_count = pitch_count[1]
+            clear_bases()
+            reset_count()
+            outs = 0
             try:
                 home_inning_runs[inning]
             except:
                 home_inning_runs.append(0)
         elif current_half==1:
+            print("Middle of Inning")
+            pitch_count[1] = current_pitch_count
+            current_pitch_count = pitch_count[0]
+            clear_bases()
+            reset_count()
+            outs = 0
             try:
                 away_inning_runs[inning]
             except:
@@ -62,6 +82,8 @@ def increment_inning():
     else:
         inning += 1
         current_half = 0
+        if outs==3:
+            outs=0
         
     update_score()
 
@@ -72,8 +94,9 @@ def decrement_inning():
     if current_half == 0 and inning > 1:
         inning -= 1
         current_half = len(inning_halfs)-1
+        
     elif current_half == 0:
-        current_half == 0
+        current_half = 0
     else:
         current_half -= 1 
     update_score()
@@ -112,7 +135,10 @@ def decrement_away_score():
       
 def increment_strikes():
     global strikes
+    global current_pitch_count
+    
     if current_half == 0 or current_half == 2:
+        current_pitch_count += 1
         if strikes < 2:
             strikes += 1
         else:
@@ -123,14 +149,20 @@ def increment_strikes():
 
 def decrement_strikes():
     global strikes
+    global current_pitch_count
+    
     if current_half == 0 or current_half == 2:
-        if strikes > 0:
+        if strikes > 0 and current_pitch_count >0:
+            current_pitch_count -=1
             strikes -= 1
     update_score()
 
 def increment_balls():
     global balls
+    global current_pitch_count
+    
     if current_half == 0 or current_half == 2:
+        current_pitch_count +=1
         if balls < 3:
             balls += 1
         else:
@@ -141,8 +173,11 @@ def increment_balls():
 
 def decrement_balls():
     global balls
+    global current_pitch_count
+    
     if current_half == 0 or current_half == 2:
-        if balls > 0:
+        if balls > 0 and current_pitch_count >0:
+            current_pitch_count -=1
             balls -= 1
     update_score()
     
@@ -185,10 +220,10 @@ def increment_outs():
         if outs < 2:
             outs += 1
         else:
-            current_half += 1
-            outs = 0
-            clear_bases()
-            reset_count()
+            increment_inning()
+            # current_half += 1
+            outs = 3
+            
     update_score()
 
 def decrement_outs():
@@ -230,7 +265,7 @@ def reset_count():
     update_score()
     
 def new_game():
-    global teams, teams_short, current_half, inning, strikes, balls, outs, home_score, home_hits, home_errors, home_inning_runs, away_score, away_hits, away_errors, away_inning_runs, bases
+    global teams, teams_short, current_half, inning, strikes, balls, outs, home_score, home_hits, home_errors, home_inning_runs, away_score, away_hits, away_errors, away_inning_runs, bases, pitch_count, current_pitch_count
     teams = ["Home", "Away"]
     teams_short = ["HME", "AWY"]
     current_half = 0
@@ -249,7 +284,19 @@ def new_game():
     away_inning_runs = [0]
 
     bases = [False, False, False]
+    
+    pitch_count = [0,0]
+    current_pitch_count = 0
     update_score()
+    
+def new_pitcher():
+    global current_pitch_count
+    current_pitch_count = 0
+    update_score()
+
+def toggle_pitch_count():
+    global show_pitch_count
+    show_pitch_count = not show_pitch_count
 
 def team_config():
     config_window = tk.Toplevel(root)
@@ -257,6 +304,7 @@ def team_config():
     
     def config_save():
         global teams, home_team_color, away_team_color, home_team_color2, away_team_color2
+        name_checker()
         teams[0] = home_name_entry.get()
         teams[1] = away_name_entry.get()
         teams_short[0] = home_short_name_entry.get()
@@ -269,6 +317,7 @@ def team_config():
         update_score()
         
     def switch_teams():
+        name_checker()
         dummy_name = home_name_entry.get()
         home_name_entry.delete(0, tk.END)
         dummy_short = home_short_name_entry.get()
@@ -288,6 +337,42 @@ def team_config():
         away_team_color = away_team_color_swatch.itemconfig(away_team_color_swatch_rectangle, fill=dummy_color)
         away_team_color2 = away_team_color_swatch2.itemconfig(away_team_color_swatch_rectangle2, fill=dummy_color2)
 
+    def name_checker():
+        def shortener(name, length):
+            vowels = "AEIOU"
+            if len(name) > length:
+                for i in range(len(name) - 2, -1, -1):
+                    if name[i] in vowels and name[i - 1] not in vowels:
+                        name = name[:i] + name[i+1:]
+                if len(name) > length:
+                    temp = name[:(length-1)]
+                    name = temp + name[length]
+            return name
+        max_long = 9
+        max_short = 3
+        
+        home_name = home_name_entry.get().upper()
+        away_name = away_name_entry.get().upper()
+        
+        home_short = home_short_name_entry.get().upper()
+        away_short = away_short_name_entry.get().upper()
+        
+        home_name = shortener(home_name, max_long)
+        away_name = shortener(away_name, max_long)
+        home_short = shortener(home_short, max_short)
+        away_short = shortener(away_short, max_short)
+        
+        home_name_entry.delete(0, tk.END)
+        home_short_name_entry.delete(0, tk.END)
+        away_name_entry.delete(0, tk.END)
+        away_short_name_entry.delete(0, tk.END)
+        
+        home_name_entry.insert(0, home_name)
+        away_name_entry.insert(0, away_name)
+        home_short_name_entry.insert(0, home_short)
+        away_short_name_entry.insert(0, away_short)
+        
+        
     # def show_name_tooltip(event):
     #     global name_tooltip_window
     #     tooltip_text = "Truncate names longer than 9 characters"
@@ -374,32 +459,46 @@ def exit_application():
     root.quit()
     
 def binding_manager(event):
-    if event.char == 'p':
-        increment_inning()
-    elif event.char == 'b':
-        increment_balls()
-    elif event.char == 'k':
-        increment_strikes()
-    elif event.char == 'o':
-        increment_outs()
-    elif event.char == 'h':
-        increment_hits()
-        reset_count()
-    elif event.char == 'e':
-        increment_errors()
-    elif event.char == 'r':
-        reset_count()
-    elif event.char == 's':
-        score_run()
-    elif event.char == 'c':
-        clear_bases()
-    elif event.char == '1':
-        toggle_base(0)
-    elif event.char == '2':
-        toggle_base(1)
-    elif event.char == '3':
-        toggle_base(2)
+    if not final:
+        if event.char == 'p':
+            increment_inning()
+        elif event.char == 'b':
+            increment_balls()
+        elif event.char == 'k':
+            increment_strikes()
+        elif event.char == 'o':
+            increment_outs()
+        elif event.char == 'h':
+            increment_hits()
+            reset_count()
+        elif event.char == 'e':
+            increment_errors()
+        elif event.char == 'r':
+            reset_count()
+        elif event.char == 's':
+            score_run()
+        elif event.char == 'c':
+            clear_bases()
+        elif event.char == '1':
+            toggle_base(0)
+        elif event.char == '2':
+            toggle_base(1)
+        elif event.char == '3':
+            toggle_base(2)
+        elif event.char == 'f':
+            foul_ball()
+        elif event.char == 'n':
+            new_pitcher()
 
+def foul_ball():
+    global strikes, current_pitch_count
+    if strikes < 2:
+        increment_strikes()
+    else:
+        current_pitch_count += 1
+        update_score()
+    
+    
 def open_color_picker(e):
     # root = tk.Tk()
     # root.withdraw()  # Hide the main Tkinter window
@@ -490,6 +589,49 @@ def update_base_indicators():
     #bug updates
     bases_canvas.itemconfig(bases_indicator_bug, image = basesImg)
     
+def update_out_indicator():
+    global outs
+    global outImg
+    outs_arrangement = '-out.png'
+    if outs == 0:
+        outs_arrangement = '0'+outs_arrangement
+    elif outs == 1:
+        outs_arrangement = '1'+outs_arrangement
+    elif outs == 2:
+        outs_arrangement = '2'+outs_arrangement
+    elif outs == 3:
+        outs_arrangement = '3'+outs_arrangement        
+    outImg = ImageTk.PhotoImage(rescale_image(os.path.join(resource_folder, outs_arrangement), 0.2))
+    inn_canvas.itemconfig(outs_bug, image = outImg)
+    
+def update_half_indicator():
+    global current_half
+    global halfImg
+    half_arrangement ='.png'
+    if (current_half == 0 or current_half == 1) and not final:
+        half_arrangement = 'top' + half_arrangement
+    elif not final:
+        half_arrangement = 'bottom' + half_arrangement
+    else:
+        half_arrangement = 'end' + half_arrangement
+    halfImg = ImageTk.PhotoImage(rescale_image(os.path.join(resource_folder, half_arrangement), 0.12))
+    count_canvas.itemconfig(half_bug, image = halfImg)
+
+def end_game():
+    global current_half
+    global halfImg
+    global final
+    
+    if not final:
+        # outs_canvas.itemconfig(pitch_count_bug, text = "")
+        final = True
+        update_score()
+        count_canvas.coords(inns_bug, 133//2+3, 67//2)
+        count_canvas.itemconfig(inns_bug, text=f"F / {inning}")
+    elif final:
+        final = False
+        update_score()
+    
     
 def update_score():
     # Update labels with the new values
@@ -519,20 +661,42 @@ def update_scorebug():
     team_canvas.itemconfig(home_canvas_rectangle, fill=home_team_color)
 
     team_canvas.itemconfig(away_canvas_team_name, text=teams[1].upper(), fill=away_team_color2)
-    team_canvas.itemconfig(away_canvas_team_name_shadow, text=teams[1].upper(), fill=shadow_color_finder(away_team_color, away_team_color2))
+    # team_canvas.itemconfig(away_canvas_team_name_shadow, text=teams[1].upper(), fill=shadow_color_finder(away_team_color, away_team_color2))
     team_canvas.itemconfig(home_canvas_team_name, text=teams[0].upper(), fill=home_team_color2)
-    team_canvas.itemconfig(home_canvas_team_name_shadow, text=teams[0].upper(), fill=shadow_color_finder(home_team_color, home_team_color2))
+    # team_canvas.itemconfig(home_canvas_team_name_shadow, text=teams[0].upper(), fill=shadow_color_finder(home_team_color, home_team_color2))
     
     score_canvas.itemconfig(away_score_text, text=away_score)
     score_canvas.itemconfig(home_score_text, text=home_score)
     
-    outs_canvas.itemconfig(count_bug, text=f"{balls} - {strikes}")
-    if not outs == 1:
-        inn_canvas.itemconfig(outs_bug,text=f"{outs} OUTS")
-    else:
-        inn_canvas.itemconfig(outs_bug,text=f"{outs} OUT")
-    inn_canvas.itemconfig(inns_bug, text=f"{inning_halfs[current_half].upper()} {inning}")
+    inn_canvas.itemconfig(count_bug, text=f"{balls} - {strikes}")
     
+    count_canvas.coords(inns_bug, 133//2+10, 67//2)
+    
+    outs_canvas.itemconfig(pitch_count_bug, text=f"{current_pitch_count}")
+        
+    
+    if  current_half==1 or current_half == 3 or final:
+        inn_canvas.itemconfig(count_bug, fill ='black')
+    else:
+        inn_canvas.itemconfig(count_bug, fill ='white')
+        
+    if show_pitch_count or current_pitch_count == 0 or current_half==1 or current_half == 3 or final:
+        outs_canvas.itemconfig(pitching_label, fill = 'black')
+        outs_canvas.itemconfig(pitch_count_bug, fill = 'black')
+    else:
+        outs_canvas.itemconfig(pitching_label, fill = 'white')
+        outs_canvas.itemconfig(pitch_count_bug, fill = 'white')
+        
+    # if not outs == 1:
+    #     inn_canvas.itemconfig(outs_bug,text=f"{outs} OUTS")
+    # else:
+    #     inn_canvas.itemconfig(outs_bug,text=f"{outs} OUT")
+    
+    # print("Home Pitches: "+str(pitch_count[0]))
+    # print("Away Pitches: "+str(pitch_count[1]))
+    count_canvas.itemconfig(inns_bug, text=f"{inning}")
+    update_out_indicator()
+    update_half_indicator()
     
 def show_box_score():
     def invert_color (color):
@@ -797,6 +961,8 @@ root.bind('c', binding_manager)
 root.bind('1', binding_manager)
 root.bind('2', binding_manager)
 root.bind('3', binding_manager)
+root.bind('f', binding_manager)
+root.bind('n', binding_manager)
 
 # Grid layout: Organize widgets in rows and columns
 inning_label.grid(row=0, column=0)
@@ -864,6 +1030,13 @@ increment_errors_button.grid(row=4, column= 11, columnspan=2)
 decrement_errors_button.grid(row=4, column= 9, columnspan=2)
 
 
+pitch_count_indicator = tk.Checkbutton(root, text="Hide Pitch Count", command=lambda: toggle_pitch_count())
+pitch_count_indicator. grid(row=5, column=10)
+new_pitcher_button = tk.Button(root, text = "New Pitcher", command = new_pitcher)
+new_pitcher_button.grid(row =5, column=11, columnspan=2)
+finalize_button = tk.Button(root, text = "End Game", command=end_game)
+finalize_button.grid(row=6, column=9, columnspan = 4, rowspan=2)
+
 # Spacer
 spacer_label = tk.Label(root, text="     ")
 spacer_label.grid(row=0, column=3)
@@ -894,17 +1067,18 @@ scorebug.title("Scorebug")
 team_bug_font = font.Font(family="Arial Black", size=50, weight='bold')
 count_bug_font = font.Font(family="Arial", size=25, weight='bold')
 inns_bug_font = font.Font(family="Arial Narrow", size=36)
+pitch_bug_font = font.Font(family="Arial", size=14)
 
 canvas_width = 500
 canvas_height = 200
 offset=3
 team_canvas = tk.Canvas(scorebug, width=canvas_width, height=canvas_height)
 away_canvas_rectangle = team_canvas.create_rectangle(0, 0, canvas_width+50, canvas_height//2+50, fill=away_team_color, outline="")
-away_canvas_team_name_shadow = team_canvas.create_text(canvas_width-15+offset,canvas_height//4+offset, text=teams[1], fill=shadow_color_finder(away_team_color), font=team_bug_font, anchor='e')
+# away_canvas_team_name_shadow = team_canvas.create_text(canvas_width-15+offset,canvas_height//4+offset, text=teams[1], fill=shadow_color_finder(away_team_color), font=team_bug_font, anchor='e')
 away_canvas_team_name = team_canvas.create_text(canvas_width-15,canvas_height//4, text=teams[1], fill='white', font=team_bug_font, anchor='e')
 
 home_canvas_rectangle = team_canvas.create_rectangle(0, canvas_height//2, canvas_width+50, canvas_height//1+50, fill=home_team_color, outline="")
-home_canvas_team_name_shadow = team_canvas.create_text(canvas_width-15+offset,150+offset, text=teams[0], fill=shadow_color_finder(home_team_color, home_team_color2), font=team_bug_font, anchor='e')
+# home_canvas_team_name_shadow = team_canvas.create_text(canvas_width-15+offset,150+offset, text=teams[0], fill=shadow_color_finder(home_team_color, home_team_color2), font=team_bug_font, anchor='e')
 home_canvas_team_name = team_canvas.create_text(canvas_width-15,150, text=teams[0], fill=home_team_color2, font=team_bug_font, anchor='e')
 team_canvas.grid(row=0, column=0, padx=0, pady=0, rowspan=2)
 
@@ -922,19 +1096,36 @@ bases_canvas.grid(row=0, column=2)
 count_canvas = tk.Canvas(scorebug, width=133, height=67)
 count_bg = count_canvas.create_rectangle(0,0,133,67, fill='black')
 # count_bug = count_canvas.create_text(133//2+3, 67//2, text=f"{balls} - {strikes}", fill='white', font=count_bug_font)
+# inns_bug = count_canvas.create_text(133//2+3, 67//2, text=f"Inning: {inning_halfs[current_half].upper()} {inning}", fill='white', font=count_bug_font)
+
+halfImg = ImageTk.PhotoImage(rescale_image(os.path.join(resource_folder, 'bottom.png')))
+half_bug = count_canvas.create_image(133//2-15, 67//2+2, image=halfImg)
+inns_bug = count_canvas.create_text(133//2+10, 67//2+2, text=f"{inning}", fill='white', font=count_bug_font)
+
 count_canvas.grid(row=1,column=2)
 
 inn_canvas = tk.Canvas(scorebug, width=133, height=133)
 inn_bg=inn_canvas.create_rectangle(-15,-15,150,150, fill='black')
-inns_bug = inn_canvas.create_text(133//2+3, 133//2-10, text=f"Inning: {inning_halfs[current_half].upper()} {inning}", fill='white', font=inns_bug_font)
-outs_bug = inn_canvas.create_text(133//2+3, 67//2*3+10, text=f"{outs} Outs", fill='white', font=count_bug_font)
+count_bug = inn_canvas.create_text(133//2+3, 133//2-10, text=f"{balls} - {strikes}", fill='white', font=inns_bug_font)
+# inns_bug = inn_canvas.create_text(133//2+3, 133//2-10, text=f"Inning: {inning_halfs[current_half].upper()} {inning}", fill='white', font=inns_bug_font)
+outImg = ImageTk.PhotoImage(rescale_image(os.path.join(resource_folder, '3-out.png')))
+outs_bug = inn_canvas.create_image(133//2+3, 67//2*3+10, image=outImg)
+# outs_bug = inn_canvas.create_text(133//2+3, 67//2*3+10, text=f"{outs} Outs", fill='white', font=count_bug_font)
 
 inn_canvas.grid(row=0, column=3)
 
 outs_canvas = tk.Canvas(scorebug, width=133, height=67)
 outs_bg = outs_canvas.create_rectangle(0,0,133,67, fill='black')
+# outs_bg1 = outs_canvas.create_rectangle(0,0,(133-5)//2,67, fill='black')
+# outs_bg2 = outs_canvas.create_rectangle((133+5)//2,0,133,67, fill='black')
+
 # outs_bug = outs_canvas.create_text(133//2+3, 67//2, text=f"{outs} Outs", fill='white', font=count_bug_font)
-count_bug = outs_canvas.create_text(133//2+3, 67//2, text=f"{balls} - {strikes}", fill='white', font=count_bug_font)
+# count_bug = outs_canvas.create_text(133//2+3, 67//2, text=f"{balls} - {strikes}", fill='white', font=count_bug_font)
+
+pitching_label = outs_canvas.create_text(133//2+3, 67//4, text="Pitches:", fill="white", font=pitch_bug_font)
+# pitch_count_bug =outs_canvas.create_text((133)//2+3, 67//3*2, text=f"{current_pitch_count}", fill="white", font=count_bug_font)
+pitch_count_bug =outs_canvas.create_text((133)//2+3, 67//3*2, text=f"{current_pitch_count}", fill="white", font=count_bug_font)
+
 outs_canvas.grid(row=1, column=3)
 
 update_score()
